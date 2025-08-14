@@ -1,4 +1,4 @@
-const myName = "Sudharsan"; // change to your Instagram display name
+const myName = "sudharsan"; // change to your Instagram display name
 
 document.getElementById('fileInput').addEventListener('change', function(e) {
     const file = e.target.files[0];
