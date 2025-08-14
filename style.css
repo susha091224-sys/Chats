@@ -28,8 +28,17 @@ header h2 {
     margin: 0 0 5px;
 }
 
-#fileInput {
+.filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    justify-content: center;
+    margin-top: 5px;
+}
+
+.filters input {
     font-size: 12px;
+    padding: 2px 5px;
 }
 
 #chatContainer {
@@ -49,6 +58,7 @@ header h2 {
     line-height: 1.4;
     font-size: 14px;
     word-break: break-word;
+    white-space: pre-wrap; /* preserve spaces & emoji */
 }
 
 .message img {
