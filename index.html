@@ -4,185 +4,228 @@
 <meta charset="UTF-8">
 <title>Instagram Chat Viewer</title>
 <style>
-    body {
-        font-family: Arial, sans-serif;
-        background: #f0f2f5;
-        margin: 0;
-        padding: 0;
-    }
-    header {
-        padding: 10px;
-        background: #fff;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        position: sticky;
-        top: 0;
-        z-index: 10;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    }
-    header input {
-        margin-right: 10px;
-    }
-    #chat {
-        padding: 20px;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-    }
-    .message {
-        max-width: 60%;
-        padding: 10px;
-        border-radius: 12px;
-        word-wrap: break-word;
-        white-space: pre-wrap;
-    }
-    .me {
-        background: #dcf8c6;
-        align-self: flex-end;
-    }
-    .them {
-        background: #fff;
-        align-self: flex-start;
-    }
-    img, video {
-        max-width: 100%;
-        border-radius: 8px;
-        margin-top: 5px;
-    }
-    a {
-        color: #1877f2;
-        text-decoration: none;
-    }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  margin: 0;
+  background: #fafafa;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+header {
+  background: white;
+  border-bottom: 1px solid #ddd;
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+header input, header button {
+  padding: 5px;
+}
+#chat-container {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column-reverse; /* newest at bottom */
+  padding: 10px;
+}
+.date-divider {
+  text-align: center;
+  margin: 10px 0;
+  color: #888;
+  font-size: 12px;
+}
+.message {
+  max-width: 70%;
+  padding: 8px 12px;
+  border-radius: 18px;
+  margin-bottom: 4px;
+  position: relative;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+}
+.message:hover .timestamp {
+  opacity: 1;
+}
+.me {
+  align-self: flex-end;
+  background-color: #3797f0;
+  color: white;
+  border-bottom-right-radius: 4px;
+}
+.them {
+  align-self: flex-start;
+  background-color: #efefef;
+  color: black;
+  border-bottom-left-radius: 4px;
+}
+.timestamp {
+  position: absolute;
+  bottom: -14px;
+  right: 10px;
+  font-size: 10px;
+  color: gray;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+img, video {
+  max-width: 200px;
+  max-height: 200px;
+  border-radius: 12px;
+  display: block;
+  margin-top: 5px;
+}
 </style>
 </head>
 <body>
-
 <header>
-    <div>
-        <input type="file" id="fileInput" accept=".json">
-        <input type="date" id="dateFilter">
-        <input type="text" id="searchBox" placeholder="Search messages">
-    </div>
+  <input type="file" id="folderPicker" webkitdirectory directory multiple>
+  <input type="date" id="dateFilter">
+  <input type="text" id="searchInput" placeholder="Search messages">
 </header>
-
-<div id="chat"></div>
+<div id="chat-container"></div>
 
 <script>
-function fixEmojis(str) {
-    try {
-        return decodeURIComponent(escape(str));
-    } catch (e) {
-        return str;
+let messages = [];
+let username = "";
+let loadedCount = 0;
+const batchSize = 50;
+const chatContainer = document.getElementById('chat-container');
+
+document.getElementById('folderPicker').addEventListener('change', async (e) => {
+  messages = [];
+  const files = Array.from(e.target.files);
+  const jsonFiles = files.filter(f => f.name.endsWith('.json'));
+  const mediaFiles = files.filter(f => !f.name.endsWith('.json'));
+
+  // Load and merge JSON messages
+  for (const file of jsonFiles) {
+    const text = await file.text();
+    const data = JSON.parse(text);
+    messages = messages.concat(data.messages || data);
+    if (!username && data.title) username = data.title;
+  }
+
+  // Sort by timestamp ascending
+  messages.sort((a, b) => a.timestamp_ms - b.timestamp_ms);
+
+  // Attach media file paths
+  for (const msg of messages) {
+    if (msg.photos) {
+      msg.photos = msg.photos.map(p => {
+        const found = mediaFiles.find(mf => mf.webkitRelativePath.endsWith(p.uri.split('/').pop()));
+        return found ? URL.createObjectURL(found) : null;
+      }).filter(Boolean);
     }
-}
+    if (msg.videos) {
+      msg.videos = msg.videos.map(v => {
+        const found = mediaFiles.find(mf => mf.webkitRelativePath.endsWith(v.uri.split('/').pop()));
+        return found ? URL.createObjectURL(found) : null;
+      }).filter(Boolean);
+    }
+  }
 
-let allMessages = [];
-
-document.getElementById('fileInput').addEventListener('change', function(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = function(event) {
-        const data = JSON.parse(event.target.result);
-        // Instagram export can have messages under data.messages or top-level
-        allMessages = data.messages || data;
-        renderChat(allMessages);
-    };
-    reader.readAsText(file);
+  loadedCount = 0;
+  chatContainer.innerHTML = '';
+  loadMoreMessages();
+  chatContainer.scrollTop = chatContainer.scrollHeight;
 });
 
-document.getElementById('dateFilter').addEventListener('change', applyFilters);
-document.getElementById('searchBox').addEventListener('input', applyFilters);
+chatContainer.addEventListener('scroll', () => {
+  if (chatContainer.scrollTop === 0) {
+    loadMoreMessages();
+  }
+});
 
-function applyFilters() {
-    const dateValue = document.getElementById('dateFilter').value;
-    const searchValue = document.getElementById('searchBox').value.toLowerCase();
-    
-    let filtered = allMessages;
-
-    if (dateValue) {
-        const filterTime = new Date(dateValue).setHours(0,0,0,0);
-        filtered = filtered.filter(m => {
-            const msgDate = new Date(m.timestamp_ms).setHours(0,0,0,0);
-            return msgDate === filterTime;
-        });
-    }
-
-    if (searchValue) {
-        filtered = filtered.filter(m => {
-            const textParts = [];
-            if (m.content) textParts.push(fixEmojis(m.content));
-            if (m.share?.share_text) textParts.push(fixEmojis(m.share.share_text));
-            return textParts.join(" ").toLowerCase().includes(searchValue);
-        });
-    }
-
-    renderChat(filtered);
+function loadMoreMessages() {
+  const start = Math.max(messages.length - loadedCount - batchSize, 0);
+  const end = messages.length - loadedCount;
+  const batch = messages.slice(start, end);
+  loadedCount += batch.length;
+  renderMessages(batch, start === 0);
 }
 
-function renderChat(messages) {
-    const chat = document.getElementById('chat');
-    chat.innerHTML = '';
-    messages.sort((a, b) => a.timestamp_ms - b.timestamp_ms);
+function renderMessages(batch, isFirst) {
+  let lastDate = null;
+  const frag = document.createDocumentFragment();
+  for (const msg of batch) {
+    const date = new Date(msg.timestamp_ms);
+    const dateStr = date.toDateString();
+    if (dateStr !== lastDate) {
+      const div = document.createElement('div');
+      div.className = 'date-divider';
+      div.textContent = dateStr;
+      frag.appendChild(div);
+      lastDate = dateStr;
+    }
 
-    messages.forEach(msg => {
-        const div = document.createElement('div');
-        div.className = 'message ' + (msg.sender_name.toLowerCase() === 'sudharsan' ? 'me' : 'them');
+    const bubble = document.createElement('div');
+    bubble.className = 'message ' + (msg.sender_name.toLowerCase() === username?.toLowerCase() ? 'me' : 'them');
+    if (msg.content) bubble.innerHTML = escapeHtml(msg.content);
+    if (msg.share?.link) {
+      const link = document.createElement('a');
+      link.href = msg.share.link;
+      link.target = '_blank';
+      link.textContent = msg.share.link;
+      bubble.appendChild(document.createElement('br'));
+      bubble.appendChild(link);
+    }
+    if (msg.photos) {
+      msg.photos.forEach(url => {
+        const img = document.createElement('img');
+        img.src = url;
+        bubble.appendChild(img);
+      });
+    }
+    if (msg.videos) {
+      msg.videos.forEach(url => {
+        const vid = document.createElement('video');
+        vid.src = url;
+        vid.controls = true;
+        bubble.appendChild(vid);
+      });
+    }
+    const timeSpan = document.createElement('div');
+    timeSpan.className = 'timestamp';
+    timeSpan.textContent = date.toLocaleTimeString();
+    bubble.appendChild(timeSpan);
+    frag.appendChild(bubble);
+  }
+  chatContainer.appendChild(frag);
+  if (isFirst) chatContainer.scrollTop = chatContainer.scrollHeight;
+}
 
-        // Text content
-        if (msg.content) {
-            const textDiv = document.createElement('div');
-            textDiv.textContent = fixEmojis(msg.content);
-            div.appendChild(textDiv);
-        }
+function escapeHtml(text) {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\n/g, "<br>");
+}
 
-        // Photos
-        if (msg.photos) {
-            msg.photos.forEach(photo => {
-                const img = document.createElement('img');
-                img.src = photo.uri;
-                div.appendChild(img);
-            });
-        }
+document.getElementById('dateFilter').addEventListener('input', filterMessages);
+document.getElementById('searchInput').addEventListener('input', filterMessages);
 
-        // Videos
-        if (msg.videos) {
-            msg.videos.forEach(video => {
-                const vid = document.createElement('video');
-                vid.src = video.uri;
-                vid.controls = true;
-                div.appendChild(vid);
-            });
-        }
-
-        // Link shares
-        if (msg.share) {
-            if (msg.share.share_text) {
-                const shareTextDiv = document.createElement('div');
-                shareTextDiv.textContent = fixEmojis(msg.share.share_text);
-                div.appendChild(shareTextDiv);
-            }
-            if (msg.share.link) {
-                const linkDiv = document.createElement('a');
-                linkDiv.href = msg.share.link;
-                linkDiv.target = "_blank";
-                linkDiv.textContent = "🔗 Open Link";
-                div.appendChild(linkDiv);
-            }
-            if (msg.share.original_content_owner) {
-                const ownerDiv = document.createElement('div');
-                ownerDiv.style.fontSize = "0.8em";
-                ownerDiv.style.color = "#666";
-                ownerDiv.textContent = "Owner: " + msg.share.original_content_owner;
-                div.appendChild(ownerDiv);
-            }
-        }
-
-        chat.appendChild(div);
+function filterMessages() {
+  const dateVal = document.getElementById('dateFilter').value;
+  const searchVal = document.getElementById('searchInput').value.toLowerCase();
+  chatContainer.innerHTML = '';
+  let filtered = messages;
+  if (dateVal) {
+    filtered = filtered.filter(m => {
+      const d = new Date(m.timestamp_ms);
+      return d.toISOString().split('T')[0] === dateVal;
     });
+  }
+  if (searchVal) {
+    filtered = filtered.filter(m =>
+      (m.content && m.content.toLowerCase().includes(searchVal)) ||
+      (m.share?.share_text && m.share.share_text.toLowerCase().includes(searchVal))
+    );
+  }
+  renderMessages(filtered, true);
 }
 </script>
-
 </body>
 </html>
