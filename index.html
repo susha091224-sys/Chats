@@ -11,101 +11,126 @@
         padding: 0;
     }
     header {
-        background: #fff;
         padding: 10px;
+        background: #fff;
         display: flex;
         justify-content: space-between;
         align-items: center;
-        border-bottom: 1px solid #ddd;
         position: sticky;
         top: 0;
         z-index: 10;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     }
-    #chatContainer {
-        max-width: 800px;
-        margin: auto;
-        padding: 10px;
+    header input {
+        margin-right: 10px;
+    }
+    #chat {
+        padding: 20px;
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 10px;
     }
     .message {
-        max-width: 70%;
-        padding: 8px 12px;
-        border-radius: 18px;
+        max-width: 60%;
+        padding: 10px;
+        border-radius: 12px;
         word-wrap: break-word;
-        display: inline-block;
+        white-space: pre-wrap;
     }
     .me {
+        background: #dcf8c6;
         align-self: flex-end;
-        background: #d1f0ff;
     }
     .them {
-        align-self: flex-start;
         background: #fff;
-        border: 1px solid #ddd;
+        align-self: flex-start;
     }
-    .timestamp {
-        font-size: 0.75em;
-        color: #888;
-        margin-top: 2px;
-    }
-    img {
-        max-width: 200px;
-        display: block;
-        margin-top: 5px;
+    img, video {
+        max-width: 100%;
         border-radius: 8px;
+        margin-top: 5px;
     }
-    .controls {
-        display: flex;
-        gap: 10px;
-        align-items: center;
+    a {
+        color: #1877f2;
+        text-decoration: none;
     }
 </style>
 </head>
 <body>
 
 <header>
-    <div class="controls">
+    <div>
         <input type="file" id="fileInput" accept=".json">
-        <input type="text" id="searchInput" placeholder="Search messages...">
         <input type="date" id="dateFilter">
+        <input type="text" id="searchBox" placeholder="Search messages">
     </div>
 </header>
 
-<div id="chatContainer"></div>
+<div id="chat"></div>
 
 <script>
-let allMessages = [];
-let myName = "";
-
-// Fix double-encoded emoji from Instagram exports
 function fixEmojis(str) {
     try {
         return decodeURIComponent(escape(str));
-    } catch {
+    } catch (e) {
         return str;
     }
 }
 
-// Render chat messages
+let allMessages = [];
+
+document.getElementById('fileInput').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(event) {
+        const data = JSON.parse(event.target.result);
+        // Instagram export can have messages under data.messages or top-level
+        allMessages = data.messages || data;
+        renderChat(allMessages);
+    };
+    reader.readAsText(file);
+});
+
+document.getElementById('dateFilter').addEventListener('change', applyFilters);
+document.getElementById('searchBox').addEventListener('input', applyFilters);
+
+function applyFilters() {
+    const dateValue = document.getElementById('dateFilter').value;
+    const searchValue = document.getElementById('searchBox').value.toLowerCase();
+    
+    let filtered = allMessages;
+
+    if (dateValue) {
+        const filterTime = new Date(dateValue).setHours(0,0,0,0);
+        filtered = filtered.filter(m => {
+            const msgDate = new Date(m.timestamp_ms).setHours(0,0,0,0);
+            return msgDate === filterTime;
+        });
+    }
+
+    if (searchValue) {
+        filtered = filtered.filter(m => {
+            const textParts = [];
+            if (m.content) textParts.push(fixEmojis(m.content));
+            if (m.share?.share_text) textParts.push(fixEmojis(m.share.share_text));
+            return textParts.join(" ").toLowerCase().includes(searchValue);
+        });
+    }
+
+    renderChat(filtered);
+}
+
 function renderChat(messages) {
-    const container = document.getElementById('chatContainer');
-    container.innerHTML = "";
+    const chat = document.getElementById('chat');
+    chat.innerHTML = '';
+    messages.sort((a, b) => a.timestamp_ms - b.timestamp_ms);
 
     messages.forEach(msg => {
-        if (!msg.content && !msg.photos && !msg.videos) return;
-
         const div = document.createElement('div');
-        div.classList.add('message');
+        div.className = 'message ' + (msg.sender_name.toLowerCase() === 'sudharsan' ? 'me' : 'them');
 
-        if (msg.sender_name === myName) {
-            div.classList.add('me');
-        } else {
-            div.classList.add('them');
-        }
-
-        // Text
+        // Text content
         if (msg.content) {
             const textDiv = document.createElement('div');
             textDiv.textContent = fixEmojis(msg.content);
@@ -115,80 +140,48 @@ function renderChat(messages) {
         // Photos
         if (msg.photos) {
             msg.photos.forEach(photo => {
-                const link = document.createElement('a');
-                link.href = photo.uri;
-                link.target = "_blank";
                 const img = document.createElement('img');
                 img.src = photo.uri;
-                link.appendChild(img);
-                div.appendChild(link);
+                div.appendChild(img);
             });
         }
 
         // Videos
         if (msg.videos) {
             msg.videos.forEach(video => {
-                const link = document.createElement('a');
-                link.href = video.uri;
-                link.target = "_blank";
-                link.textContent = "📹 Video";
-                div.appendChild(link);
+                const vid = document.createElement('video');
+                vid.src = video.uri;
+                vid.controls = true;
+                div.appendChild(vid);
             });
         }
 
-        // Timestamp
-        const timeDiv = document.createElement('div');
-        timeDiv.classList.add('timestamp');
-        timeDiv.textContent = new Date(msg.timestamp_ms).toLocaleString();
-        div.appendChild(timeDiv);
-
-        container.appendChild(div);
-    });
-}
-
-// File load
-document.getElementById('fileInput').addEventListener('change', e => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = function(ev) {
-        const data = JSON.parse(ev.target.result);
-        allMessages = data.messages || [];
-
-        // Set my name from participants (first is usually me)
-        if (data.participants && data.participants.length > 0) {
-            myName = data.participants[0].name;
+        // Link shares
+        if (msg.share) {
+            if (msg.share.share_text) {
+                const shareTextDiv = document.createElement('div');
+                shareTextDiv.textContent = fixEmojis(msg.share.share_text);
+                div.appendChild(shareTextDiv);
+            }
+            if (msg.share.link) {
+                const linkDiv = document.createElement('a');
+                linkDiv.href = msg.share.link;
+                linkDiv.target = "_blank";
+                linkDiv.textContent = "🔗 Open Link";
+                div.appendChild(linkDiv);
+            }
+            if (msg.share.original_content_owner) {
+                const ownerDiv = document.createElement('div');
+                ownerDiv.style.fontSize = "0.8em";
+                ownerDiv.style.color = "#666";
+                ownerDiv.textContent = "Owner: " + msg.share.original_content_owner;
+                div.appendChild(ownerDiv);
+            }
         }
 
-        renderChat(allMessages);
-    };
-    reader.readAsText(file);
-});
-
-// Search
-document.getElementById('searchInput').addEventListener('input', e => {
-    const term = e.target.value.toLowerCase();
-    const filtered = allMessages.filter(m => 
-        m.content && fixEmojis(m.content).toLowerCase().includes(term)
-    );
-    renderChat(filtered);
-});
-
-// Date filter
-document.getElementById('dateFilter').addEventListener('change', e => {
-    const selectedDate = e.target.value;
-    if (!selectedDate) {
-        renderChat(allMessages);
-        return;
-    }
-    const filtered = allMessages.filter(m => {
-        const msgDate = new Date(m.timestamp_ms);
-        const msgStr = msgDate.toISOString().split('T')[0];
-        return msgStr === selectedDate;
+        chat.appendChild(div);
     });
-    renderChat(filtered);
-});
+}
 </script>
 
 </body>
