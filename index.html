@@ -2,462 +2,345 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Instagram Chat Viewer</title>
 <style>
-  :root{
-    --me:#3797f0;        /* IG DM blue */
-    --them:#efefef;      /* IG DM gray */
-    --bg:#fafafa;
-    --text:#111;
+  :root {
+    --bg: #fafafa;
+    --fg: #111;
     --muted:#8f8f8f;
-    --radius:18px;
+    --bubble-me:#3797f0;
+    --bubble-them:#efefef;
+    --date-bg:#e9e9e9;
+    --card:#fff;
+  }
+  body.dark {
+    --bg:#121212;
+    --fg:#e0e0e0;
+    --muted:#a1a1a6;
+    --bubble-me:#0d6efd;       /* brighter blue */
+    --bubble-them:#2c2c2e;     /* darker grey */
+    --date-bg:#1f1f1f;
+    --card:#1a1a1d;
   }
   *{box-sizing:border-box}
   html,body{height:100%}
   body{
-    margin:0;background:var(--bg);color:var(--text);
+    margin:0;background:var(--bg);color:var(--fg);
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
     display:flex;flex-direction:column;
   }
   header{
-    background:#fff;border-bottom:1px solid #e5e5e5;
-    padding:8px 10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;position:sticky;top:0;z-index:5;
+    position:sticky;top:0;z-index:50;background:var(--card);border-bottom:1px solid rgba(0,0,0,.08);
   }
-  header input, header button{
-    font:inherit;padding:8px 10px;border:1px solid #ddd;border-radius:10px;background:#fff;
+  .topbar{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;
   }
-  #nameInput{width:180px}
+  .profile{display:flex;align-items:center;gap:10px;min-width:0}
+  .profile img{width:36px;height:36px;border-radius:50%;object-fit:cover;background:#ddd}
+  .title{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .right-controls button,.right-controls input[type="checkbox"]{cursor:pointer}
+  .controls{
+    display:flex;gap:8px;flex-wrap:wrap;padding:8px 12px;border-top:1px solid rgba(0,0,0,.06);
+    background:var(--card);
+  }
+  input,button{
+    font:inherit;padding:8px 10px;border:1px solid rgba(0,0,0,.15);border-radius:10px;background:transparent;color:inherit;
+  }
+  input[type="file"]{padding:6px}
   #chat{
-    flex:1;overflow-y:auto;position:relative;padding:12px 12px 30px;
-    display:flex;flex-direction:column; /* newest at bottom via scroll-to-end */
+    flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;
   }
+  #floatingDate{position:sticky;top:86px;display:flex;justify-content:center;z-index:5;pointer-events:none}
+  #floatingDate span{background:var(--date-bg);color:#666;padding:4px 10px;border-radius:12px;font-size:12px;box-shadow:0 1px 2px rgba(0,0,0,.06)}
   .date-divider{
-    align-self:center;color:var(--muted);font-size:12px;
-    background:#e9e9e9;border-radius:12px;padding:4px 10px;margin:14px 0;
+    align-self:center;background:var(--date-bg);color:#666;font-size:12px;padding:4px 10px;border-radius:12px;margin:12px 0;
   }
+  .row{display:flex;flex-direction:column;gap:2px;margin:2px 0}
+  .row.me{align-items:flex-end}
+  .row.them{align-items:flex-start}
   .bubble{
-    max-width:72%;padding:10px 14px;border-radius:var(--radius);
-    word-wrap:break-word;white-space:pre-wrap;position:relative;margin:2px 0;
+    max-width:72%;padding:10px 14px;border-radius:18px;word-wrap:break-word;white-space:pre-wrap;color:#000;
+    background:var(--bubble-them);
   }
-  .me{align-self:flex-end;background:var(--me);color:#fff;border-bottom-right-radius:6px;}
-  .them{align-self:flex-start;background:var(--them);color:#000;border-bottom-left-radius:6px;}
-  .time{
-    font-size:11px;color:#9b9b9b;opacity:0;transition:opacity .15s ease;
-    margin-top:3px;
-  }
-  .me .time{ text-align:right; }
-  .them .time{ text-align:left; }
-  .bubble:hover .time{opacity:1}
-  img, video{max-width:240px;max-height:240px;border-radius:12px;display:block;margin-top:6px}
+  .row.them .bubble{background:var(--bubble-them);color:#fff0; /* color set below for contrast */}
+  .row.them .bubble{color:#fff}
+  .row.me .bubble{background:var(--bubble-me);color:#fff;border-bottom-right-radius:6px}
+  .row.them .bubble{border-bottom-left-radius:6px}
+  .time{font-size:11px;color:var(--muted);opacity:0;margin-top:3px}
+  .row.me .time{text-align:right}
+  .row.them .time{text-align:left}
+  .bubble:hover + .time{opacity:1}
+  .group-gap{height:6px}
   a{color:#00376b;text-decoration:none;word-break:break-all}
   a:hover{text-decoration:underline}
-  mark{background:#ffe38e;padding:0 2px;border-radius:2px}
-  /* Floating date at top while scrolling */
-  #floatingDate{
-    position:sticky;top:50px; /* below the header */
-    z-index:4;display:flex;justify-content:center;pointer-events:none;
-  }
-  #floatingDate span{
-    background:#e9e9e9;color:#666;font-size:12px;padding:4px 10px;border-radius:12px;
-    box-shadow:0 1px 2px rgba(0,0,0,.04);
-  }
+  img.media, video.media{max-width:240px;max-height:240px;border-radius:12px;display:block;margin-top:6px;cursor:pointer}
+  #lightbox{position:fixed;inset:0;background:rgba(0,0,0,.85);display:none;align-items:center;justify-content:center;z-index:100}
+  #lightbox .wrap{max-width:92vw;max-height:92vh}
+  #lightbox img,#lightbox video{max-width:92vw;max-height:92vh;display:block}
+  #lightbox .close{position:absolute;top:12px;right:18px;font-size:28px;color:#fff;cursor:pointer}
+  .hidden{display:none}
+  .pill{padding:4px 8px;border-radius:999px;border:1px solid rgba(0,0,0,.15);background:transparent}
 </style>
 </head>
 <body>
   <header>
-    <input type="file" id="folderPicker" webkitdirectory directory multiple />
-    <input type="text" id="nameInput" placeholder="Your name (right side)" />
-    <input type="date" id="dateFilter" />
-    <input type="text" id="searchInput" placeholder="Search…" />
-    <button id="clearBtn">Clear</button>
+    <div class="topbar">
+      <div class="profile">
+        <img id="avatar" alt="Profile" />
+        <div class="title" id="chatTitle">Instagram Chat</div>
+      </div>
+      <div class="right-controls" style="display:flex;align-items:center;gap:8px">
+        <label class="pill" style="display:flex;align-items:center;gap:6px;padding:6px 10px">
+          <input id="themeToggle" type="checkbox" /> <span>Dark</span>
+        </label>
+      </div>
+    </div>
+    <div class="controls">
+      <input type="file" id="folderPicker" webkitdirectory directory multiple />
+      <input type="search" id="searchBox" placeholder="Search…" />
+      <input type="date" id="startDate" />
+      <input type="date" id="endDate" />
+      <button id="clearBtn">Clear</button>
+      <button id="toggleUserBtn">Toggle User</button>
+    </div>
   </header>
 
-  <div id="floatingDate" aria-hidden="true"><span></span></div>
+  <div id="floatingDate"><span></span></div>
   <div id="chat"></div>
 
+  <div id="lightbox" role="dialog" aria-modal="true">
+    <div class="close" id="lightboxClose" title="Close">&times;</div>
+    <div class="wrap" id="lightboxContent"></div>
+  </div>
+
 <script>
-/* ---------- Helpers ---------- */
+const $ = sel => document.querySelector(sel);
+const chatEl = $('#chat');
+const floatingDateSpan = $('#floatingDate span');
 
-/* Robust emoji fix for IG exports that look like: \u00f0\u009f\u0098\u0082 */
-function fixEmojis(str){
-  if(!str) return "";
-  try{
-    // If it contains \u00xx bytes (already decoded to 0x00-0xFF), map 0x00..0xFF to %xx and decode as UTF-8
-    // escape() turns each 0x00..0xFF into %xx; decodeURIComponent reads those as UTF-8 bytes.
-    const repaired = decodeURIComponent(escape(str));
-    return repaired;
-  }catch{ return str; }
-}
-
-/* Simple URL linker that keeps text nodes emoji-safe and adds <a> only for links */
-const urlRe = /(https?:\/\/[^\s)]+)|(www\.[^\s)]+)/gi;
-function linkifyAndHighlight(text, query=""){
+function decodeWeirdEmoji(str){ try{ return decodeURIComponent(escape(str)); }catch(e){ return str; } }
+function ymd(ms){ return new Date(ms).toISOString().slice(0,10); }
+function niceTime(ms){ return new Date(ms).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'}); }
+function linkify(text){
+  const urlRe = /(https?:\/\/[^\s)]+)|(www\.[^\s)]+)/gi;
   const frag = document.createDocumentFragment();
-  const safe = fixEmojis(text);
-  let last = 0;
-  const pushText = (t, highlight=false)=>{
-    if(!t) return;
-    if(!highlight){ frag.appendChild(document.createTextNode(t)); return; }
-    const mark = document.createElement('mark'); mark.textContent = t; frag.appendChild(mark);
-  };
-  // First split into link vs non-link
-  let m;
-  while((m = urlRe.exec(safe)) !== null){
+  const s = decodeWeirdEmoji(text);
+  let last = 0, m;
+  while((m = urlRe.exec(s)) !== null){
+    const before = s.slice(last, m.index);
+    if(before) frag.appendChild(document.createTextNode(before));
     const url = m[0];
-    const before = safe.slice(last, m.index);
-    appendWithHighlight(before, query);
     const a = document.createElement('a');
-    a.href = url.startsWith('http') ? url : ('https://' + url);
-    a.target = "_blank"; a.rel = "noopener";
+    a.href = url.startsWith('http') ? url : 'https://' + url;
+    a.target = '_blank'; a.rel='noopener';
     a.textContent = url;
     frag.appendChild(a);
     last = m.index + url.length;
   }
-  appendWithHighlight(safe.slice(last), query);
+  const rest = s.slice(last);
+  if(rest) frag.appendChild(document.createTextNode(rest));
   return frag;
-
-  function appendWithHighlight(chunk, q){
-    if(!q){ frag.appendChild(document.createTextNode(chunk)); return; }
-    const low = chunk.toLowerCase();
-    const needle = q.toLowerCase();
-    if(!needle.trim()){ frag.appendChild(document.createTextNode(chunk)); return; }
-    let i = 0, idx;
-    while((idx = low.indexOf(needle, i)) !== -1){
-      const pre = chunk.slice(i, idx);
-      const hit = chunk.slice(idx, idx+needle.length);
-      if(pre) frag.appendChild(document.createTextNode(pre));
-      if(hit) pushText(hit, true);
-      i = idx + needle.length;
-    }
-    const rest = chunk.slice(i);
-    if(rest) frag.appendChild(document.createTextNode(rest));
-  }
 }
 
-/* Date utilities */
-function ymd(ms){ return new Date(ms).toISOString().slice(0,10); }
-function niceDate(ms){ return new Date(ms).toDateString(); }
-function niceTime(ms){ return new Date(ms).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}); }
+let allMessages = [], renderStart = 0, renderEnd = 0, PAGE = 80;
+let meName = "", themName = "", avatarURL = "";
+const mediaByName = new Map();
 
-/* ---------- State ---------- */
-let allMessages = [];     // fully normalized & sorted ascending
-let renderStart = 0;      // index of first rendered message
-let renderEnd = 0;        // index after last rendered (exclusive)
-const pageSize = 80;
-let mediaMap = new Map(); // filename -> objectURL
-let meName = "";
-const chat = document.getElementById('chat');
-const floatingDateSpan = document.querySelector('#floatingDate span');
+let toggleUser = false;
+const toggleBtn = $('#toggleUserBtn');
+toggleBtn.addEventListener('click', ()=>{
+  toggleUser = !toggleUser;
+  renderWindow(true);
+});
 
-/* ---------- Load Folder ---------- */
-document.getElementById('folderPicker').addEventListener('change', async (e)=>{
+const themeToggle = $('#themeToggle');
+(function initTheme(){
+  const t = localStorage.getItem('theme') || 'light';
+  if(t==='dark'){ document.body.classList.add('dark'); themeToggle.checked = true; }
+  themeToggle.addEventListener('change', ()=>{
+    document.body.classList.toggle('dark', themeToggle.checked);
+    localStorage.setItem('theme', themeToggle.checked? 'dark':'light');
+  });
+})();
+
+const lightbox = $('#lightbox'), lightboxContent = $('#lightboxContent'), lightboxClose = $('#lightboxClose');
+lightboxClose.addEventListener('click', ()=> lightbox.style.display='none');
+lightbox.addEventListener('click', (e)=> { if(e.target===lightbox) lightbox.style.display='none'; });
+function openLightbox(src, isVideo){
+  lightboxContent.innerHTML='';
+  if(isVideo){
+    const v=document.createElement('video'); v.src=src; v.controls=true; v.autoplay=true; v.style.maxWidth='92vw'; v.style.maxHeight='92vh';
+    lightboxContent.appendChild(v);
+  } else {
+    const img=document.createElement('img'); img.src=src; img.alt='media'; img.style.maxWidth='92vw'; img.style.maxHeight='92vh';
+    lightboxContent.appendChild(img);
+  }
+  lightbox.style.display='flex';
+}
+
+$('#folderPicker').addEventListener('change', async (e)=>{
   resetAll();
   const files = Array.from(e.target.files);
-  const jsons = files.filter(f => f.name.endsWith('.json'));
-  const media = files.filter(f => !f.name.endsWith('.json'));
-
-  // Build filename -> objectURL map (O(1) lookup)
-  media.forEach(f => mediaMap.set(f.name, URL.createObjectURL(f)));
-
-  // Merge messages
-  for(const f of jsons){
+  const jsonFiles = files.filter(f => f.name.endsWith('.json'));
+  const mediaFiles = files.filter(f => !f.name.endsWith('.json'));
+  mediaFiles.forEach(f => mediaByName.set(f.name, URL.createObjectURL(f)));
+  for(const f of jsonFiles){
     const text = await f.text();
-    const data = JSON.parse(text);
-    if(!meName && data.participants && data.participants.length){
-      // default guess: first participant is you (editable in UI)
-      meName = data.participants[0].name;
-      document.getElementById('nameInput').value = meName;
-    }
-    const msgs = data.messages || data || [];
-    for(const m of msgs){
-      // Normalize attachments to object URLs if available
-      if(Array.isArray(m.photos)){
-        m._photos = m.photos
-          .map(p => mediaMap.get((p.uri||"").split('/').pop()))
-          .filter(Boolean);
+    try{
+      const data = JSON.parse(text);
+      if(data?.participants && !meName) meName = data.participants[0]?.name || meName;
+      const msgs = data.messages || [];
+      for(const m of msgs){
+        if(m.content) m._content = decodeWeirdEmoji(m.content);
+        if(m.share?.share_text) m._share_text = decodeWeirdEmoji(m.share.share_text);
+        if(Array.isArray(m.photos)) m._photos = m.photos.map(p => mediaByName.get(p.uri.split('/').pop())).filter(Boolean);
+        if(Array.isArray(m.videos)) m._videos = m.videos.map(v => mediaByName.get(v.uri.split('/').pop())).filter(Boolean);
+        allMessages.push(m);
       }
-      if(Array.isArray(m.videos)){
-        m._videos = m.videos
-          .map(v => mediaMap.get((v.uri||"").split('/').pop()))
-          .filter(Boolean);
+      if(data?.participants){
+        const others = data.participants.filter(p => p.name !== meName);
+        if(others[0]) themName = themName || others[0].name;
       }
-      // Pre-store decoded text for speed
-      if(m.content) m._content = fixEmojis(m.content);
-      if(m.share && m.share.share_text) m._share_text = fixEmojis(m.share.share_text);
-      allMessages.push(m);
-    }
+    }catch(err){ console.warn('Bad JSON:', f.name, err); }
   }
-  // Sort strictly by timestamp
+  if(!meName || !themName){
+    const counts = new Map();
+    for(const m of allMessages){ if(m.sender_name){ counts.set(m.sender_name, (counts.get(m.sender_name)||0)+1); } }
+    const sorted = [...counts.entries()].sort((a,b)=>b[1]-a[1]);
+    if(sorted.length>=2){ themName = themName || sorted[0][0]; meName = meName || sorted[1][0]; }
+    else if(sorted.length===1) meName = meName || sorted[0][0];
+  }
+  $('#chatTitle').textContent = themName || 'Instagram Chat';
+  const avatarFile = [...mediaByName.keys()].find(n => themName && n.toLowerCase().includes(themName.toLowerCase()));
+  $('#avatar').src = avatarFile ? mediaByName.get(avatarFile) : 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><circle cx="40" cy="40" r="40" fill="%23ccc"/><circle cx="40" cy="30" r="14" fill="%23eee"/><rect x="16" y="50" width="48" height="22" rx="11" fill="%23eee"/></svg>';
   allMessages.sort((a,b)=>a.timestamp_ms - b.timestamp_ms);
-
-  // Initial window = last page
+  if(allMessages.length){
+    $('#startDate').value = ymd(allMessages[0].timestamp_ms);
+    $('#endDate').value = ymd(allMessages[allMessages.length-1].timestamp_ms);
+  }
   renderEnd = allMessages.length;
-  renderStart = Math.max(0, renderEnd - pageSize);
-  renderInitial();
-  scrollToBottom();
-
-  // Update floating date immediately
+  renderStart = Math.max(0, renderEnd - PAGE);
+  renderWindow(true);
+  scrollToBottom(true);
   updateFloatingDate();
 });
 
-/* ---------- Controls ---------- */
-document.getElementById('nameInput').addEventListener('input', (e)=>{
-  meName = e.target.value.trim();
-  rerenderCurrentWindow();
+$('#searchBox').addEventListener('input', applyFilters);
+$('#startDate').addEventListener('input', applyFilters);
+$('#endDate').addEventListener('input', applyFilters);
+$('#clearBtn').addEventListener('click', ()=>{
+  $('#searchBox').value='';
+  if(allMessages.length){
+    $('#startDate').value = ymd(allMessages[0].timestamp_ms);
+    $('#endDate').value = ymd(allMessages[allMessages.length-1].timestamp_ms);
+  } else { $('#startDate').value=''; $('#endDate').value=''; }
+  renderEnd = allMessages.length;
+  renderStart = Math.max(0, renderEnd - PAGE);
+  renderWindow(true);
+  scrollToBottom(true);
+  updateFloatingDate();
 });
 
-document.getElementById('clearBtn').addEventListener('click', ()=>{
-  document.getElementById('dateFilter').value = "";
-  document.getElementById('searchInput').value = "";
-  rerenderCurrentWindow();
-});
+function filtersActive(){
+  const s = $('#searchBox').value.trim();
+  const a = $('#startDate').value;
+  const b = $('#endDate').value;
+  if(!allMessages.length) return !!s || !!a || !!b;
+  const fullA = ymd(allMessages[0].timestamp_ms);
+  const fullB = ymd(allMessages[allMessages.length-1].timestamp_ms);
+  return !!s || (a && a!==fullA) || (b && b!==fullB);
+}
 
-document.getElementById('dateFilter').addEventListener('input', applyFilters);
-document.getElementById('searchInput').addEventListener('input', applyFilters);
-
-/* When filters are active, render only matches and pause infinite scroll */
 function applyFilters(){
-  const dateVal = document.getElementById('dateFilter').value;
-  const q = document.getElementById('searchInput').value.trim().toLowerCase();
-
-  if(!dateVal && !q){
-    // back to windowed infinite scroll
-    rerenderCurrentWindow();
-    scrollToBottomIfNearEnd();
+  const s = $('#searchBox').value.trim().toLowerCase();
+  const a = $('#startDate').value;
+  const b = $('#endDate').value;
+  if(!filtersActive()){
+    renderEnd = allMessages.length;
+    renderStart = Math.max(0, renderEnd - PAGE);
+    renderWindow(true);
+    scrollToBottom(true);
     return;
   }
-
-  // Filtered render (no paging for now)
+  const from = a ? new Date(a+'T00:00:00').getTime() : -Infinity;
+  const to = b ? new Date(b+'T23:59:59.999').getTime() : Infinity;
   const filtered = allMessages.filter(m=>{
-    if(dateVal && ymd(m.timestamp_ms)!==dateVal) return false;
-    if(q){
-      const blob = (m._content||"") + " " + (m._share_text||"") + " " + (m.share?.link||"");
-      if(!blob.toLowerCase().includes(q)) return false;
-    }
-    return true;
+    const t=m.timestamp_ms;
+    if(t<from || t>to) return false;
+    if(!s) return true;
+    const blob = (m._content||"") + " " + (m._share_text||"") + " " + (m.share?.link||"");
+    return blob.toLowerCase().includes(s);
   });
-  renderList(filtered, true, q); // full replace
+  renderList(filtered, true);
+  scrollToTop();
 }
 
-/* ---------- Rendering ---------- */
 function resetAll(){
-  chat.innerHTML = "";
-  allMessages = [];
-  mediaMap = new Map();
-  renderStart = renderEnd = 0;
-  floatingDateSpan.textContent = "";
+  chatEl.innerHTML=''; floatingDateSpan.textContent=''; allMessages=[];
+  renderStart=renderEnd=0; meName=themName=''; mediaByName.clear();
+  $('#chatTitle').textContent='Instagram Chat'; $('#avatar').src='';
 }
 
-function renderInitial(){
-  chat.innerHTML = "";
+function renderWindow(replace){
   const slice = allMessages.slice(renderStart, renderEnd);
-  renderList(slice, true);
+  renderList(slice, replace);
 }
 
-function rerenderCurrentWindow(){
-  const slice = allMessages.slice(renderStart, renderEnd);
-  renderList(slice, true);
-}
-
-function renderList(list, replace=false, highlightQuery=""){
-  if(replace) chat.innerHTML = "";
-
+function renderList(list, replace){
+  if(replace) chatEl.innerHTML='';
   const frag = document.createDocumentFragment();
-  let lastDate = null;
-
+  let lastDay=null, prevSender=null;
   for(const m of list){
     const day = ymd(m.timestamp_ms);
-    if(day !== lastDate){
-      // avoid duplicate divider if last child already has this date
-      const lastChild = frag.lastElementChild || chat.lastElementChild;
-      const lastIsSame =
-        lastChild && lastChild.classList && lastChild.classList.contains('date-divider') &&
-        lastChild.getAttribute('data-date') === day;
-      if(!lastIsSame){
-        const divider = document.createElement('div');
-        divider.className = 'date-divider';
-        divider.setAttribute('data-date', day);
-        divider.textContent = niceDate(m.timestamp_ms);
-        frag.appendChild(divider);
-      }
-      lastDate = day;
+    if(day!==lastDay){
+      const divider=document.createElement('div'); divider.className='date-divider';
+      divider.setAttribute('data-date', day); divider.textContent = new Date(day).toDateString();
+      frag.appendChild(divider); lastDay=day; prevSender=null;
     }
-
-    const bubble = document.createElement('div');
-    bubble.className = 'bubble ' + ((meName && m.sender_name && m.sender_name.trim().toLowerCase()===meName.trim().toLowerCase()) ? 'me':'them');
-    bubble.setAttribute('data-date', day);
-
-    // text content (with linkify + highlight)
-    if(m._content){
-      bubble.appendChild(linkifyAndHighlight(m._content, highlightQuery));
-    }
-
-    // share text + link
-    if(m._share_text){
-      if(m._content) bubble.appendChild(document.createElement('br'));
-      bubble.appendChild(linkifyAndHighlight(m._share_text, highlightQuery));
-    }
-    if(m.share && m.share.link){
-      const a = document.createElement('a');
-      a.href = m.share.link; a.target="_blank"; a.rel="noopener";
-      a.textContent = m.share.link;
-      bubble.appendChild(document.createElement('br'));
-      bubble.appendChild(a);
-    }
-
-    // photos
-    if(m._photos && m._photos.length){
-      m._photos.forEach(src=>{
-        const img = document.createElement('img'); img.src = src;
-        img.loading="lazy"; img.decoding="async";
-        img.addEventListener('click',()=>window.open(src,'_blank'));
-        bubble.appendChild(img);
-      });
-    }
-
-    // videos
-    if(m._videos && m._videos.length){
-      m._videos.forEach(src=>{
-        const v = document.createElement('video'); v.src = src; v.controls = true;
-        v.preload = "metadata";
-        bubble.appendChild(v);
-      });
-    }
-
-    const t = document.createElement('div');
-    t.className = 'time';
-    t.textContent = niceTime(m.timestamp_ms);
-    bubble.appendChild(t);
-
-    frag.appendChild(bubble);
+    let isMe = (meName && m.sender_name && m.sender_name.trim().toLowerCase()===meName.trim().toLowerCase());
+    if(toggleUser) isMe = !isMe;
+    const row=document.createElement('div'); row.className='row '+(isMe?'me':'them');
+    if(prevSender!==null && prevSender!==isMe){ const gap=document.createElement('div'); gap.className='group-gap'; frag.appendChild(gap);}
+    prevSender=isMe;
+    const bubble=document.createElement('div'); bubble.className='bubble';
+    if(m._content) bubble.appendChild(linkify(m._content));
+    if(m._share_text){ if(m._content) bubble.appendChild(document.createElement('br')); bubble.appendChild(linkify(m._share_text)); }
+    if(m.share?.link){ const link=document.createElement('a'); link.href=m.share.link; link.target='_blank'; link.rel='noopener'; link.textContent=m.share.link; bubble.appendChild(document.createElement('br')); bubble.appendChild(link); }
+    if(m._photos){ m._photos.forEach(src=>{ const img=document.createElement('img'); img.className='media'; img.src=src; img.addEventListener('click',()=>openLightbox(src,false)); bubble.appendChild(img); }); }
+    if(m._videos){ m._videos.forEach(src=>{ const v=document.createElement('video'); v.className='media'; v.src=src; v.controls=true; v.addEventListener('click',()=>openLightbox(src,true)); bubble.appendChild(v); }); }
+    const t = document.createElement('div'); t.className='time'; t.textContent = niceTime(m.timestamp_ms);
+    row.appendChild(bubble); row.appendChild(t); frag.appendChild(row);
   }
-  chat.appendChild(frag);
-  updateFloatingDate();
+  chatEl.appendChild(frag); updateFloatingDate();
 }
 
-/* Infinite scroll: prepend older messages when near top */
-chat.addEventListener('scroll', ()=>{
+function scrollToBottom(smooth){ chatEl.scrollTo({top: chatEl.scrollHeight, behavior: smooth?'smooth':'auto'}); }
+function scrollToTop(){ chatEl.scrollTo({top:0, behavior:'auto'}); }
+
+chatEl.addEventListener('scroll', ()=>{
   updateFloatingDate();
-
-  // If filters active, skip infinite scroll
-  if(document.getElementById('dateFilter').value || document.getElementById('searchInput').value.trim()){
-    return;
-  }
-
-  if(chat.scrollTop < 60 && renderStart > 0){
-    const prevHeight = chat.scrollHeight;
-    const newStart = Math.max(0, renderStart - pageSize);
+  if(filtersActive()) return;
+  if(chatEl.scrollTop < 40 && renderStart > 0){
+    const priorHeight = chatEl.scrollHeight;
+    const newStart = Math.max(0, renderStart - PAGE);
     const slice = allMessages.slice(newStart, renderStart);
-    renderStart = newStart;
-
-    // Prepend without wiping, but maintain scroll position
-    const beforeTopOffset = chat.scrollHeight;
-    const frag = document.createDocumentFragment();
-    // build with consistent date dividers
-    let lastDate = null;
-    const firstExisting = chat.firstElementChild;
-    const firstExistingDate = firstExisting && firstExisting.getAttribute && firstExisting.getAttribute('data-date');
-
-    for(const m of slice){
-      const day = ymd(m.timestamp_ms);
-      if(day !== lastDate){
-        // avoid duplicate with first existing divider
-        const addDivider = !(firstExisting && firstExisting.classList.contains('date-divider') && firstExistingDate===day && lastDate===null);
-        if(addDivider){
-          const divider = document.createElement('div');
-          divider.className='date-divider';
-          divider.setAttribute('data-date', day);
-          divider.textContent = niceDate(m.timestamp_ms);
-          frag.appendChild(divider);
-        }
-        lastDate = day;
-      }
-      const dummy = document.createElement('div');
-      // reuse renderer by temporary list
-      renderList([m], false);
-      // (we already appended to chat; we need a safe prepend path)
-      // To keep it simple: remove what renderList added at end and move to frag
-    }
-    // The snippet above complicates; simpler: render slice into a hidden container:
+    renderList(slice, false);
+    renderStart=newStart;
+    chatEl.scrollTop += chatEl.scrollHeight - priorHeight;
   }
 });
 
-/* Because the prepend path above got complex, implement a simpler helper */
-function prependMessages(list){
-  const frag = document.createDocumentFragment();
-  let lastDate = null;
-  const firstExisting = chat.firstElementChild;
-  const firstExistingDate = firstExisting && firstExisting.getAttribute && firstExisting.getAttribute('data-date');
-
-  for(const m of list){
-    const day = ymd(m.timestamp_ms);
-    if(day !== lastDate){
-      const addDivider = !(firstExisting && firstExisting.classList.contains('date-divider') && firstExistingDate===day && lastDate===null);
-      if(addDivider){
-        const divider = document.createElement('div');
-        divider.className='date-divider';
-        divider.setAttribute('data-date', day);
-        divider.textContent = niceDate(m.timestamp_ms);
-        frag.appendChild(divider);
-      }
-      lastDate = day;
-    }
-    // create bubble node
-    const bubble = document.createElement('div');
-    bubble.className = 'bubble ' + ((meName && m.sender_name && m.sender_name.trim().toLowerCase()===meName.trim().toLowerCase()) ? 'me':'them');
-    bubble.setAttribute('data-date', day);
-    if(m._content){ bubble.appendChild(linkifyAndHighlight(m._content)); }
-    if(m._share_text){
-      if(m._content) bubble.appendChild(document.createElement('br'));
-      bubble.appendChild(linkifyAndHighlight(m._share_text));
-    }
-    if(m.share && m.share.link){
-      const a = document.createElement('a'); a.href=m.share.link; a.target="_blank"; a.rel="noopener"; a.textContent=m.share.link;
-      bubble.appendChild(document.createElement('br')); bubble.appendChild(a);
-    }
-    if(m._photos){ m._photos.forEach(src=>{ const img=document.createElement('img'); img.src=src; img.loading="lazy"; img.decoding="async"; img.addEventListener('click',()=>window.open(src,'_blank')); bubble.appendChild(img); }); }
-    if(m._videos){ m._videos.forEach(src=>{ const v=document.createElement('video'); v.src=src; v.controls=true; v.preload="metadata"; bubble.appendChild(v); }); }
-    const t=document.createElement('div'); t.className='time'; t.textContent=niceTime(m.timestamp_ms); bubble.appendChild(t);
-    frag.appendChild(bubble);
-  }
-  const prevHeight = chat.scrollHeight;
-  chat.insertBefore(frag, chat.firstChild);
-  // keep viewport anchored
-  const newHeight = chat.scrollHeight;
-  chat.scrollTop += (newHeight - prevHeight);
-  updateFloatingDate();
-}
-
-/* Rewire the infinite scroll now that prependMessages exists */
-chat.addEventListener('scroll', ()=>{
-  updateFloatingDate();
-  if(document.getElementById('dateFilter').value || document.getElementById('searchInput').value.trim()){ return; }
-  if(chat.scrollTop < 60 && renderStart > 0){
-    const newStart = Math.max(0, renderStart - pageSize);
-    const slice = allMessages.slice(newStart, renderStart);
-    renderStart = newStart;
-    prependMessages(slice);
-  }
-});
-
-/* Floating date updater: picks the last divider whose top is above the viewport */
 function updateFloatingDate(){
-  const top = chat.scrollTop;
-  const nodes = chat.querySelectorAll('.date-divider');
-  let current = "";
-  for(const node of nodes){
-    if(node.offsetTop - top <= 10){ current = node.getAttribute('data-date'); }
-    else break;
+  const rows = [...chatEl.querySelectorAll('.row,.date-divider')];
+  const top = chatEl.scrollTop + 60;
+  let current = null;
+  for(const r of rows){
+    const rTop = r.offsetTop;
+    if(rTop>top) break;
+    if(r.classList.contains('date-divider')) current = r.getAttribute('data-date');
   }
-  floatingDateSpan.textContent = current ? new Date(current).toDateString() : "";
-}
-
-/* Utilities */
-function scrollToBottom(){ chat.scrollTop = chat.scrollHeight; }
-function scrollToBottomIfNearEnd(){
-  const nearBottom = (chat.scrollHeight - chat.scrollTop - chat.clientHeight) < 200;
-  if(nearBottom) scrollToBottom();
+  floatingDateSpan.textContent = current || '';
 }
 </script>
 </body>
