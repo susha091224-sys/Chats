@@ -75,30 +75,47 @@ function renderChat(messages) {
             div.classList.add('them');
         }
 
-        // Add text (with emoji support automatically via UTF-8 rendering)
+        // Text with emoji-safe rendering
         if (msg.content) {
-            div.innerHTML += `<div>${msg.content}</div>`;
+            const textDiv = document.createElement('div');
+            textDiv.textContent = msg.content; // preserves emoji
+            div.appendChild(textDiv);
         }
 
-        // Add photos
+        // Photos
         if (msg.photos) {
             msg.photos.forEach(photo => {
-                div.innerHTML += `<a href="${photo.uri}" target="_blank">
-                    <img src="${photo.uri}" alt="photo">
-                </a>`;
+                const link = document.createElement('a');
+                link.href = photo.uri;
+                link.target = "_blank";
+
+                const img = document.createElement('img');
+                img.src = photo.uri;
+                img.alt = "photo";
+
+                link.appendChild(img);
+                div.appendChild(link);
             });
         }
 
-        // Add videos
+        // Videos
         if (msg.videos) {
             msg.videos.forEach(video => {
-                div.innerHTML += `<a href="${video.uri}" target="_blank">📹 Video</a>`;
+                const link = document.createElement('a');
+                link.href = video.uri;
+                link.target = "_blank";
+                link.textContent = "📹 Video";
+                div.appendChild(link);
             });
         }
 
         // Timestamp
-        div.innerHTML += `<div class="timestamp">${new Date(msg.timestamp_ms).toLocaleString()}</div>`;
+        const timeDiv = document.createElement('div');
+        timeDiv.classList.add('timestamp');
+        timeDiv.textContent = new Date(msg.timestamp_ms).toLocaleString();
+        div.appendChild(timeDiv);
 
         container.appendChild(div);
     });
 }
+
