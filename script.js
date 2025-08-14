@@ -1,3 +1,4 @@
+let allMessages = [];
 const myName = "sudharsan"; // change to your Instagram display name
 
 document.getElementById('fileInput').addEventListener('change', function(e) {
@@ -8,7 +9,9 @@ document.getElementById('fileInput').addEventListener('change', function(e) {
     reader.onload = function(event) {
         try {
             const data = JSON.parse(event.target.result);
-            renderChat(data);
+            allMessages = data.messages || [];
+            allMessages.reverse();
+            applyFilters();
         } catch (err) {
             alert("Invalid JSON file");
             console.error(err);
@@ -17,12 +20,50 @@ document.getElementById('fileInput').addEventListener('change', function(e) {
     reader.readAsText(file);
 });
 
-function renderChat(data) {
+document.getElementById('dateFilter').addEventListener('change', applyFilters);
+document.getElementById('timeFilter').addEventListener('change', applyFilters);
+document.getElementById('searchInput').addEventListener('input', applyFilters);
+
+function applyFilters() {
+    const dateValue = document.getElementById('dateFilter').value;
+    const timeValue = document.getElementById('timeFilter').value;
+    const searchValue = document.getElementById('searchInput').value.toLowerCase();
+
+    let filtered = allMessages;
+
+    // Date filter
+    if (dateValue) {
+        const selectedDate = new Date(dateValue);
+        filtered = filtered.filter(msg => {
+            const msgDate = new Date(msg.timestamp_ms);
+            return msgDate.getFullYear() === selectedDate.getFullYear() &&
+                   msgDate.getMonth() === selectedDate.getMonth() &&
+                   msgDate.getDate() === selectedDate.getDate();
+        });
+    }
+
+    // Time filter (only if date is also selected)
+    if (timeValue && dateValue) {
+        const [hours, minutes] = timeValue.split(':').map(Number);
+        filtered = filtered.filter(msg => {
+            const msgDate = new Date(msg.timestamp_ms);
+            return msgDate.getHours() === hours && msgDate.getMinutes() === minutes;
+        });
+    }
+
+    // Search filter
+    if (searchValue) {
+        filtered = filtered.filter(msg => msg.content && msg.content.toLowerCase().includes(searchValue));
+    }
+
+    renderChat(filtered);
+}
+
+function renderChat(messages) {
     const container = document.getElementById('chatContainer');
     container.innerHTML = "";
 
-    const messages = data.messages || [];
-    messages.reverse().forEach(msg => {
+    messages.forEach(msg => {
         if (!msg.content && !msg.photos && !msg.videos) return;
 
         const div = document.createElement('div');
@@ -34,7 +75,7 @@ function renderChat(data) {
             div.classList.add('them');
         }
 
-        // Add text
+        // Add text (with emoji support automatically via UTF-8 rendering)
         if (msg.content) {
             div.innerHTML += `<div>${msg.content}</div>`;
         }
